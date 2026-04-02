@@ -103,15 +103,15 @@ def build_data_loader(X, Y, batch_size=32):
 def load_pytorch_model(model_path, device, input_shape, num_classes):
     """
     Load a PyTorch model from checkpoint.
-    
+
     Supports both .pt/.pth files and attempts to infer architecture.
     Also supports loading old Keras .h5 models by converting them (if possible).
     """
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
-    
+
     checkpoint = torch.load(model_path, map_location=device)
-    
+
     # Try to infer model architecture from checkpoint
     if isinstance(checkpoint, dict):
         if 'model_state_dict' in checkpoint:
@@ -122,11 +122,11 @@ def load_pytorch_model(model_path, device, input_shape, num_classes):
             state_dict = checkpoint
     else:
         state_dict = checkpoint
-    
+
     # Detect model architecture from state_dict keys or model path
     model_name = 'convnet'  # Default
     dataset_name = 'CIFAR10'  # Default
-    
+
     # Check state_dict keys to detect ResNet18
     state_dict_keys = list(state_dict.keys())
     if any('bn1' in key or 'layer1' in key or 'layer2' in key for key in state_dict_keys):
@@ -135,17 +135,25 @@ def load_pytorch_model(model_path, device, input_shape, num_classes):
     elif 'resnet18' in model_path.lower():
         # Also check model path for explicit resnet18 mention
         model_name = 'resnet18'
-    
+    elif any('cls_token' in key for key in state_dict_keys) and \
+         any('patch_embed.proj.weight' in key for key in state_dict_keys) and \
+         any('blocks.' in key for key in state_dict_keys):
+        model_name = 'vit'
+    elif 'vit' in model_path.lower():
+        model_name = 'vit'
+
     # Try to infer dataset from model path
     if 'cifar10' in model_path.lower():
         dataset_name = 'CIFAR10'
     elif 'gtsrb' in model_path.lower():
         dataset_name = 'GTSRB'
-    
+    elif 'svhn' in model_path.lower():
+        dataset_name = 'SVHN'
+
     # Try to create model with detected architecture
     try:
         from architectures import create_model
-        
+
         # Create model with detected architecture
         model = create_model(dataset_name, model_name, device)
         model.load_state_dict(state_dict, strict=False)
@@ -379,7 +387,7 @@ def main():
         '--dataset-name',
         type=str,
         default=None,
-        choices=['CIFAR10', 'CIFAR100', 'MNIST', 'Fashion-MNIST'],
+        choices=['CIFAR10', 'CIFAR100', 'MNIST', 'Fashion-MNIST', 'GTSRB', 'SVHN'],
         help='Dataset name to load from torchvision (e.g., CIFAR10, CIFAR100, MNIST, Fashion-MNIST)'
     )
     parser.add_argument(
